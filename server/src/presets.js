@@ -2,12 +2,39 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
-const DEFAULT_ROOTS = [
-  "C:\\Program Files\\Adobe\\Adobe After Effects 2026\\Support Files\\Presets",
-  "C:\\Program Files\\Adobe\\Adobe After Effects 2025\\Support Files\\Presets",
-  path.join(os.homedir(), "Documents", "Adobe", "After Effects"),
-  path.join(os.homedir(), "AppData", "Roaming", "Adobe", "After Effects"),
-];
+// Every installed "Adobe After Effects*" folder under `base`, plus the given
+// per-install subfolder (e.g. "Presets" on macOS, "Support Files/Presets" on Windows).
+function installRoots(base, ...sub) {
+  try {
+    return fs
+      .readdirSync(base, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && e.name.startsWith("Adobe After Effects"))
+      .map((e) => path.join(base, e.name, ...sub));
+  } catch {
+    return [];
+  }
+}
+
+function defaultRoots() {
+  const home = os.homedir();
+  if (process.platform === "darwin") {
+    return [
+      ...installRoots("/Applications", "Presets"),
+      path.join(home, "Documents", "Adobe", "After Effects"),
+      path.join(home, "Library", "Application Support", "Adobe", "After Effects"),
+    ];
+  }
+  if (process.platform === "win32") {
+    return [
+      ...installRoots("C:\\Program Files\\Adobe", "Support Files", "Presets"),
+      path.join(home, "Documents", "Adobe", "After Effects"),
+      path.join(home, "AppData", "Roaming", "Adobe", "After Effects"),
+    ];
+  }
+  return [path.join(home, "Documents", "Adobe", "After Effects")];
+}
+
+const DEFAULT_ROOTS = defaultRoots();
 
 function walk(dir, maxDepth, depth, out) {
   if (depth > maxDepth) return;

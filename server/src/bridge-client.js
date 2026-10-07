@@ -1,5 +1,11 @@
 import net from "node:net";
+import os from "node:os";
+import path from "node:path";
 import { randomUUID } from "node:crypto";
+
+// After Effects writes this next to its temp folder (ExtendScript Folder.temp);
+// os.tmpdir() resolves to the same place for a normal user session.
+const LOG_HINT = path.join(os.tmpdir(), "claude-ae-bridge.log");
 
 const HOST = "127.0.0.1";
 const PORT = 41890;
@@ -130,7 +136,7 @@ export class BridgeClient {
     if (!this.connected || !this.socket) {
       throw new Error(
         "AE bridge not connected — make sure After Effects is running with claude-bridge.jsx loaded " +
-        "(check %TEMP%\\claude-ae-bridge.log for its startup log)."
+        `(check ${LOG_HINT} for its startup log).`
       );
     }
     const timeoutMs = opts.timeoutMs || CALL_TIMEOUT_MS;

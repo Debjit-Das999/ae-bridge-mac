@@ -1,9 +1,32 @@
-# ae-bridge — usage rules
+# ae-bridge (macOS) — usage rules
 
 MCP server for After Effects (`ae_*` tools). This file exists because several
 real bugs and wasted debugging cycles happened during development from
 guessing instead of checking, and from index/state assumptions that didn't
 hold. Read this before making non-trivial use of the `ae_*` tools.
+
+## macOS port status — read first
+
+This is the macOS fork of the Windows `ae-bridge`. **Nothing here has been run on
+a Mac yet.** Everything below was developed and verified on Windows (AE 26.5);
+the rest of this file's gotchas and stress-test results come from that. What was
+changed for macOS: `install.sh` (replaces `install.ps1`), OS-aware preset
+search (`server/src/presets.js`), the log-path hint in `bridge-client.js`, the
+README, and the Windows-specific commands in this file (`AfterFX.exe -r`,
+`%TEMP%`, `Get-CimInstance`, `netstat`). The wire protocol, host script and tool
+surface are unchanged.
+
+**On the first Mac session, verify in this order and record the result here:**
+1. `npm run test-bridge` passes (ping + listCompositions) — proves the
+   ExtendScript `Socket` server works on macOS AE.
+2. A 4KB `ae_run_macro` and a response with an empty array both succeed — proves
+   the buffered-read and newline-stripping fixes behave the same on macOS (the
+   host assumes `Socket.read(n)` returns partial data on timeout, as on Windows).
+3. The JSX route works: run the AppleScript command in Recipes below against a
+   trivial script. If `DoScriptFile` isn't accepted, find the correct command
+   and fix the Recipes entry — until verified, treat the JSX route as unavailable
+   and stay on the bridge.
+4. The log appears at `$TMPDIR/claude-ae-bridge.log` (AE's temp folder).
 
 ## Core rules
 
@@ -36,8 +59,9 @@ hold. Read this before making non-trivial use of the `ae_*` tools.
    thing. A clean response is not proof of a correct visual result.
 7. **Route every request: bridge (MCP) by default, JSX for big builds — and
    don't make the user manage it.** Two ways to act on AE: the `ae_*` bridge
-   tools, and a `.jsx` script run via `AfterFX.exe -r` (see Recipes). Pick
-   like this:
+   tools, and a `.jsx` script run through After Effects' own script runner
+   (AppleScript on macOS — see Recipes; **unverified on Mac until the
+   first-session checklist above passes**). Pick like this:
    - **Small task → bridge, no questions.** Tweaks to an existing scene,
      adding/editing a few layers, effects, keyframes, renames, exports —
      roughly under ~30 layers / ~100 ops. Just do it with `ae_*` tools
@@ -105,7 +129,7 @@ hold. Read this before making non-trivial use of the `ae_*` tools.
 
 - **ROOT CAUSES FOUND (2026-10-07) for most of the "timeout" mysteries below.**
   Two real transport bugs, both fixed in `host/claude-bridge.jsx` (re-run
-  `install.ps1` + restart AE to get the fix; `bridge-client.js` change needs
+  `install.sh` + restart AE to get the fix; `bridge-client.js` change needs
   a Claude session restart):
   1. *Fragmented requests.* The host read with `readln()` on a 50ms-timeout
      socket, so any request that arrived in several pieces (a 4KB macro
@@ -200,7 +224,7 @@ hold. Read this before making non-trivial use of the `ae_*` tools.
   avoid this the way it avoids `ae_batch`'s per-call network overhead.
 - **The `ae_run_macro`/`ae_batch` timeouts are a property of the bridge's
   socket transport itself, not of AE or of script size/complexity** —
-  confirmed by directly comparing against `AfterFX.exe -r` (see the Recipes
+  confirmed on Windows by directly comparing against `AfterFX.exe -r` (see the Recipes
   entry below). A 94-layer build (10 cards, each with nested shape groups,
   path trims, keyframes, and expressions — far larger than any macro that
   had timed out or failed via the bridge) ran via `-r` in about 2-3 seconds
@@ -255,12 +279,12 @@ hold. Read this before making non-trivial use of the `ae_*` tools.
   with `ae-bridge` enabled knock each other off.** The host script tracks a
   single client and replaces it whenever a new connection arrives (`New
   client arrived while old one still marked connected=true — replacing it`
-  in `%TEMP%\claude-ae-bridge.log`). With two sessions each running their own
+  in `$TMPDIR/claude-ae-bridge.log`). With two sessions each running their own
   `ae-bridge` MCP server, both keep reconnecting and every longer call fails
   with `AE bridge disconnected`, while a bare `ae_ping` can still slip
   through — which makes it look like random flakiness rather than a
   conflict. Diagnose: that log line repeating about once a second, and
-  `Get-CimInstance Win32_Process -Filter "Name='node.exe'"` showing two
+  `ps -ef | grep 'server/src/index.js'` showing two
   `ae-bridge/server/src/index.js` processes with different parent
   `claude.exe` PIDs. Fix: have the user close the other session (or disable
   its `ae-bridge` server); don't kill another session's process yourself.
@@ -357,16 +381,23 @@ hold. Read this before making non-trivial use of the `ae_*` tools.
   determined bypass. Only use it against a bridge whose network exposure
   you trust (see Security note below).
 - **Large/complex one-off build, or diagnosing whether the bridge itself is
-  the problem**: write the script to a `.jsx` file and run it via
-  `AfterFX.exe -r "<path>"` instead of `ae_run_macro`:
+  the problem**: write the script to a `.jsx` file and run it through AE's own
+  script runner instead of `ae_run_macro`. **macOS (UNVERIFIED — test with a
+  trivial script first, see the status section):**
+  ```bash
+  osascript -e 'tell application "Adobe After Effects 2026" to DoScriptFile "/absolute/path/to/script.jsx"'
   ```
-  "C:\Program Files\Adobe\Adobe After Effects 2026\Support Files\AfterFX.exe" -r "C:\path\to\script.jsx"
-  ```
-  Confirmed (via direct test — a probe script and a 94-layer real build)
-  that when AE is already running, `-r` executes the script **against that
+  (Use the exact app name from `/Applications`, e.g. "Adobe After Effects 2025".
+  If `DoScriptFile` is rejected, check AE's AppleScript dictionary in Script
+  Editor — File > Open Dictionary — and correct this entry.) The Windows
+  equivalent, which *was* verified, is
+  `AfterFX.exe -r "C:\path\to\script.jsx"`.
+  On Windows, a probe script and a 94-layer real build confirmed that when AE
+  is already running, `-r` executes the script **against that
   already-open instance and its current project**, not a separate process —
   no file-lock conflict, no second AE window. No 60-second timeout, no JSON/
-  socket layer to break. Three things to know before using it:
+  socket layer to break. Whether the macOS path behaves the same is
+  unconfirmed. Three things to know before using it:
   1. **No blocklist at all** — unlike `ae_run_macro`, a script run this way
      has full ExtendScript privileges (file/system/network/eval/ScriptUI,
      everything). Only run scripts you've fully read and trust; there's no
@@ -375,12 +406,14 @@ hold. Read this before making non-trivial use of the `ae_*` tools.
      AE blocks synchronously waiting for a human to click it, and nobody's
      watching a CLI invocation — this hangs AE with no timeout and no way
      to recover except manually clicking the dialog in the AE window.
-  3. **Don't pass anything other than a real `-r`/`-s`/documented flag** when
-     AE is already running. An unrecognized argument (tested with a bare
-     `-help`) isn't treated as a CLI flag against the running instance —
-     AE tries to **import it as a file** and throws a visible "Can't import
-     file" error dialog in the user's open AE window. Verify a flag's exact
-     syntax before invoking rather than guessing at one.
+  3. **(Windows `-r` only)** Don't pass anything other than a real
+     `-r`/`-s`/documented flag when AE is already running. An unrecognized
+     argument (tested with a bare `-help`) isn't treated as a CLI flag
+     against the running instance — AE tries to **import it as a file** and
+     throws a visible "Can't import file" error dialog in the user's open AE
+     window. Verify a flag's exact syntax before invoking rather than
+     guessing at one. (On macOS, verify the AppleScript form with a harmless
+     script before relying on it.)
 - Not yet built: shape/mask path editing after creation (no "set existing
   shape/mask property by index" op), full waveform/beat analysis,
   non-blocking render (not achievable — ExtendScript's render queue has no
@@ -388,26 +421,29 @@ hold. Read this before making non-trivial use of the `ae_*` tools.
 
 ## One-time machine setup
 
-1. AE Preferences → General/Scripting & Expressions → enable "Allow Scripts
+1. After Effects → Settings → Scripting & Expressions → enable "Allow Scripts
    to Write Files and Access Network" (required or the bridge's socket
    throws on start).
-2. `./install.ps1` from this directory, as Administrator.
-3. Restart After Effects. Confirm via `%TEMP%\claude-ae-bridge.log`.
+2. `./install.sh` from this directory (asks for your password via `sudo` if
+   `/Applications` isn't writable).
+3. Fully quit and restart After Effects. Confirm via `$TMPDIR/claude-ae-bridge.log`.
 4. `cd server && npm install`.
 5. Restart the Claude Code session to load `.mcp.json`.
 
-Any time `host/claude-bridge.jsx` changes: re-run `install.ps1` and restart
+Any time `host/claude-bridge.jsx` changes: re-run `./install.sh` and restart
 AE. Any time `server/src/*.js` changes: restart the Claude Code session.
 
 ## Security note
 
 The bridge listens on `0.0.0.0` (all network interfaces), not just
-loopback — confirmed via `netstat`. On an untrusted network this is
+loopback — confirmed on Windows via `netstat` (on macOS check with
+`lsof -iTCP:41890 -sTCP:LISTEN`; macOS may also prompt to allow incoming
+connections for AE). On an untrusted network this is
 reachable by other devices, with no authentication. See README for detail;
 this was a deliberate accepted-risk decision on a trusted home network, not
 an oversight to silently "fix".
 
-The `AfterFX.exe -r` path (see Recipes) is a stronger trust boundary than
+The JSX script-runner path (`DoScriptFile` / `-r`, see Recipes) is a stronger trust boundary than
 either `ae_batch` or `ae_run_macro` — it's local-machine-only (not reachable
 over the network the way the socket is), but it has zero blocklist: any
 script run this way has full ExtendScript privileges, no restrictions at

@@ -1,6 +1,6 @@
 // claude-bridge.jsx
 //
-// Drop this file into After Effects' Scripts/Startup folder (see install.ps1).
+// Drop this file into After Effects' Scripts/Startup folder (see install.sh).
 // It opens a local TCP listener using ExtendScript's native Socket object
 // (Socket.listen/poll — documented server mode, no CEP required) and dispatches
 // a fixed table of named operations against the AE scripting DOM.
