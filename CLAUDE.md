@@ -26,7 +26,11 @@ surface are unchanged.
    trivial script. If `DoScriptFile` isn't accepted, find the correct command
    and fix the Recipes entry — until verified, treat the JSX route as unavailable
    and stay on the bridge.
-4. The log appears at `$TMPDIR/claude-ae-bridge.log` (AE's temp folder).
+4. The log appears at `$TMPDIR/claude-ae-bridge.log` (AE's temp folder,
+   ExtendScript `Folder.temp`). If it isn't there, run
+   `find "$TMPDIR" -name claude-ae-bridge.log` — AE may use a subfolder such
+   as `TemporaryItems`. Record the real path here and replace the
+   `$TMPDIR/claude-ae-bridge.log` mentions below with it.
 
 ## Core rules
 
@@ -286,7 +290,7 @@ surface are unchanged.
   conflict. Diagnose: that log line repeating about once a second, and
   `ps -ef | grep 'server/src/index.js'` showing two
   `ae-bridge/server/src/index.js` processes with different parent
-  `claude.exe` PIDs. Fix: have the user close the other session (or disable
+  `claude` PIDs (the third column of `ps -ef`). Fix: have the user close the other session (or disable
   its `ae-bridge` server); don't kill another session's process yourself.
 - **`-r` build scripts must not let an error escape to AE.** An uncaught
   error becomes a modal dialog that freezes AE (and the bridge's poll) until
@@ -428,7 +432,10 @@ surface are unchanged.
    `/Applications` isn't writable).
 3. Fully quit and restart After Effects. Confirm via `$TMPDIR/claude-ae-bridge.log`.
 4. `cd server && npm install`.
-5. Restart the Claude Code session to load `.mcp.json`.
+5. Register the MCP server — either a `.mcp.json` in the project directory
+   or `claude mcp add ae-bridge -- node /absolute/path/to/server/src/index.js`
+   (see README "Register with Claude Code"; no `.mcp.json` ships with this
+   repo). Then restart the Claude Code session.
 
 Any time `host/claude-bridge.jsx` changes: re-run `./install.sh` and restart
 AE. Any time `server/src/*.js` changes: restart the Claude Code session.

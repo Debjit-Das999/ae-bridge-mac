@@ -126,5 +126,5 @@ coordinate.
   (the bridge delays polling on purpose). If it persists and AE shows a
   "Cannot run a script while a modal dialog is waiting for response" box, click OK
   and see `CLAUDE.md` for the startup-collision notes.
-- **Can't find the log** — `echo $TMPDIR`; After Effects' temp folder is normally
-  that same directory. `ls "$TMPDIR" | grep claude`.
+- **Can't find the log** — After Effects' temp folder is normally `$TMPDIR`, but
+  it may be a subfolder of it: `find "$TMPDIR" -name claude-ae-bridge.log`.

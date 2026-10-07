@@ -1,11 +1,21 @@
+import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 
-// After Effects writes this next to its temp folder (ExtendScript Folder.temp);
-// os.tmpdir() resolves to the same place for a normal user session.
-const LOG_HINT = path.join(os.tmpdir(), "claude-ae-bridge.log");
+// After Effects writes its log to ExtendScript's Folder.temp. That is usually
+// os.tmpdir(), but on macOS it may be the TemporaryItems subfolder of it
+// (unverified), so point at whichever candidate actually exists.
+const LOG_NAME = "claude-ae-bridge.log";
+function logHint() {
+  const candidates = [
+    path.join(os.tmpdir(), LOG_NAME),
+    path.join(os.tmpdir(), "TemporaryItems", LOG_NAME),
+  ];
+  const found = candidates.find((p) => fs.existsSync(p));
+  return found || candidates.join(" or ");
+}
 
 const HOST = "127.0.0.1";
 const PORT = 41890;
@@ -136,7 +146,7 @@ export class BridgeClient {
     if (!this.connected || !this.socket) {
       throw new Error(
         "AE bridge not connected — make sure After Effects is running with claude-bridge.jsx loaded " +
-        `(check ${LOG_HINT} for its startup log).`
+        `(check ${logHint()} for its startup log).`
       );
     }
     const timeoutMs = opts.timeoutMs || CALL_TIMEOUT_MS;

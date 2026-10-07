@@ -65,6 +65,7 @@ Next steps:
    enable "Allow Scripts to Write Files and Access Network".
 2. Fully quit and restart After Effects.
 3. Check the log for 'claude-bridge initialized (PORT=41890)':
-     cat "$TMPDIR/claude-ae-bridge.log" | tail -5
-   (After Effects' temp folder is normally the same as $TMPDIR.)
+     tail -5 "$TMPDIR/claude-ae-bridge.log"
+   If it isn't there, After Effects may be using a subfolder of $TMPDIR:
+     find "$TMPDIR" -name claude-ae-bridge.log 2>/dev/null
 EOF

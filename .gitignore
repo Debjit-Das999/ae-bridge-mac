@@ -3,7 +3,7 @@ server/node_modules/
 
 # Debug/scratch artifacts from development sessions — not part of the
 # shareable bridge (see README's "Sharing this with someone else" section,
-# which lists exactly what travels: host/, server/src/, install.ps1,
+# which lists exactly what travels: host/, server/src/, install.sh,
 # README.md, CLAUDE.md, .claude/skills/).
 preview-*.png
 diagram-macro-final.png
